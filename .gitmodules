@@ -1,0 +1,6 @@
+[submodule "vendor/github.com/elastic/beats"]
+	path = vendor/github.com/elastic/beats
+	url = https://github.com/elastic/beats
+[submodule "vendor/github.com/fsouza/go-dockerclient"]
+	path = vendor/github.com/fsouza/go-dockerclient
+	url = https://github.com/fsouza/go-dockerclient
