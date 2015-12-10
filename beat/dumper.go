@@ -113,6 +113,16 @@ func (dumper *Dumper) ScanContainers() error {
 
 		tag := envvars["DLB_TAG"]
 
+		var multilineRegexp *regexp.Regexp
+		if envvars["DLB_MULTILINE_REGEXP"] != "" {
+			var err error
+			multilineRegexp, err = regexp.Compile(envvars["DLB_MULTILINE_REGEXP"])
+			if err != nil {
+				logp.Warn("Cannot compile multiline regexp: %v %v", envvars["DLB_MULTILINE_REGEXP"], err)
+				continue
+			}
+		}
+
 		containerInfo := ContainerInfo{
 			ContainerID:   container.ID,
 			ContainerName: container.Name[1:],
@@ -122,7 +132,7 @@ func (dumper *Dumper) ScanContainers() error {
 			Host:          os.Getenv("TUTUM_NODE_HOSTNAME"),
 		}
 
-		pump := dumper.NewPump(&containerInfo)
+		pump := dumper.NewPump(&containerInfo, multilineRegexp)
 		dumper.containers[container.ID] = true
 
 		go func() {
