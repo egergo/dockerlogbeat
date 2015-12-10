@@ -2,11 +2,16 @@ package dockerlogbeat
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
 	"github.com/elastic/beats/libbeat/logp"
 	"github.com/fsouza/go-dockerclient"
+)
+
+var (
+	EnvVarRegexp *regexp.Regexp
 )
 
 type Dumper struct {
@@ -17,6 +22,14 @@ type Dumper struct {
 	containers map[string]bool
 	mutex      sync.Mutex
 	events     chan *docker.APIEvents
+}
+
+func init() {
+	var err error
+	EnvVarRegexp, err = regexp.Compile("^([^=]*)=(.*)")
+	if err != nil {
+		panic(err)
+	}
 }
 
 func NewDumper(client *docker.Client, registry *Registry, target chan *DockerLogEvent) *Dumper {
@@ -84,21 +97,21 @@ func (dumper *Dumper) ScanContainers() error {
 			continue
 		}
 
-		if SliceContains(container.Config.Env, "LOGSPOUT=ignore") {
-			continue
-		}
-
-		if SliceContains(container.Config.Env, "DLB=ignore") {
-			continue
-		}
-
-		var tag string
-		for _, envvar := range container.Config.Env {
-			if strings.HasPrefix(envvar, "DLB_TAG=") {
-				tag = envvar[8:]
-				break
+		envvars := make(map[string]string)
+		for _, line := range container.Config.Env {
+			res := EnvVarRegexp.FindStringSubmatch(line)
+			if res == nil {
+				logp.Warn("Cannot parse env var: %v", line)
+				continue
 			}
+			envvars[res[1]] = res[2]
 		}
+
+		if envvars["LOGSPOUT"] == "ignore" || envvars["DLB"] == "ignore" {
+			continue
+		}
+
+		tag := envvars["DLB_TAG"]
 
 		containerInfo := ContainerInfo{
 			ContainerID:   container.ID,
