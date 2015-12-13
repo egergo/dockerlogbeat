@@ -19,6 +19,8 @@ type DockerLogBeat struct {
 
 	PublisherAlive chan struct{}
 	Stopped        chan struct{}
+
+	RootConfig *RootConfig
 }
 
 func New() *DockerLogBeat {
@@ -27,24 +29,25 @@ func New() *DockerLogBeat {
 
 		PublisherAlive: make(chan struct{}),
 		Stopped:        make(chan struct{}),
+
+		RootConfig: NewDefaultConfig(),
 	}
 }
 
 func (dlb *DockerLogBeat) Config(b *beat.Beat) error {
 	var err error
 
-	rootConfig := RootConfig{}
-	if err = cfgfile.Read(&rootConfig, ""); err != nil {
+	if err = cfgfile.Read(dlb.RootConfig, ""); err != nil {
 		logp.Err("Error reading configuration file: %v", err)
 		return err
 	}
 
-	dlb.spooler, err = NewSpooler(dlb.Events, &rootConfig.Config)
+	dlb.spooler, err = NewSpooler(dlb.Events, dlb.RootConfig.Config)
 	if err != nil {
 		return err
 	}
 
-	dlb.registry, err = NewRegistry(rootConfig.Config.RegistryFile)
+	dlb.registry, err = NewRegistry(dlb.RootConfig.Config.RegistryFile)
 	if err != nil {
 		return err
 	}
@@ -63,7 +66,7 @@ func (dlb *DockerLogBeat) Run(b *beat.Beat) error {
 		return err
 	}
 
-	dumper := NewDumper(client, dlb.registry, dlb.spooler.C)
+	dumper := NewDumper(client, dlb.registry, dlb.spooler.C, dlb.RootConfig.Config)
 	if err := dumper.StartEventChannel(); err != nil {
 		logp.Err("Cannot start Docker event channel: %s", err)
 		return err

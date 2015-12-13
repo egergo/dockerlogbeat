@@ -18,6 +18,7 @@ type Dumper struct {
 	DockerClient *docker.Client
 	Registry     *Registry
 	Target       chan *DockerLogEvent
+	Config       *Config
 
 	containers map[string]bool
 	mutex      sync.Mutex
@@ -32,11 +33,12 @@ func init() {
 	}
 }
 
-func NewDumper(client *docker.Client, registry *Registry, target chan *DockerLogEvent) *Dumper {
+func NewDumper(client *docker.Client, registry *Registry, target chan *DockerLogEvent, config *Config) *Dumper {
 	dumper := Dumper{
 		DockerClient: client,
 		Registry:     registry,
 		Target:       target,
+		Config:       config,
 
 		containers: make(map[string]bool),
 		events:     make(chan *docker.APIEvents),
@@ -84,6 +86,11 @@ func (dumper *Dumper) ScanContainers() error {
 		return err
 	}
 	for _, c := range containers {
+		if dumper.Config.StopTutumLogrotate && strings.HasPrefix(c.Image, "tutum/logrotate") {
+			go dumper.DockerClient.StopContainer(c.ID, 0)
+			continue
+		}
+
 		if dumper.containers[c.ID] {
 			continue
 		}
