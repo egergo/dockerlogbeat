@@ -120,12 +120,13 @@ func (dumper *Dumper) ScanContainers() error {
 
 		tag := envvars["DLB_TAG"]
 
+		pattern := envvars["DLB_MULTILINE_PATTERN"]
 		var multilineRegexp *regexp.Regexp
-		if envvars["DLB_MULTILINE_REGEXP"] != "" {
+		if pattern != "" {
 			var err error
-			multilineRegexp, err = regexp.Compile(envvars["DLB_MULTILINE_REGEXP"])
+			multilineRegexp, err = regexp.Compile(pattern)
 			if err != nil {
-				logp.Warn("Cannot compile multiline regexp: %v %v", envvars["DLB_MULTILINE_REGEXP"], err)
+				logp.Warn("Cannot compile multiline regexp: %v %v", pattern, err)
 				continue
 			}
 		}
