@@ -3,6 +3,8 @@ package dockerlogbeat
 import (
 	"io"
 	"regexp"
+	"sync"
+	"time"
 
 	"github.com/elastic/beats/libbeat/logp"
 	"github.com/fsouza/go-dockerclient"
@@ -21,7 +23,13 @@ type PumpWriter struct {
 
 type MultilinePumpWriter struct {
 	PumpWriter
-	currentLine []byte
+
+	currentLine   []byte
+	ticker        *time.Ticker
+	nextFlushTime time.Time
+	mutex         sync.Mutex
+
+	Stopped chan struct{}
 }
 
 func (dumper *Dumper) NewPump(container *ContainerInfo, multilineRegexp *regexp.Regexp) *Pump {
@@ -39,17 +47,8 @@ func (pump *Pump) Run() error {
 	var stdoutWriter, stderrWriter io.WriteCloser
 
 	if pump.MultilineRegexp != nil {
-		stdoutWriter = &MultilinePumpWriter{
-			PumpWriter: PumpWriter{
-				Pump: pump,
-			},
-		}
-		stderrWriter = &MultilinePumpWriter{
-			PumpWriter: PumpWriter{
-				Pump:   pump,
-				StdErr: true,
-			},
-		}
+		stdoutWriter = NewMultilinePumpWriter(pump, false)
+		stderrWriter = NewMultilinePumpWriter(pump, true)
 	} else {
 		stdoutWriter = &PumpWriter{
 			Pump: pump,
@@ -91,29 +90,61 @@ func (pw *PumpWriter) Close() error {
 	return nil
 }
 
-func (pw *MultilinePumpWriter) Write(p []byte) (n int, err error) {
-	newLine := !pw.Pump.MultilineRegexp.Match(p[31:])
-	if newLine {
-		pw.pumpCurrent()
-		pw.currentLine = CopySlice(p)
-	} else {
-		pw.currentLine = append(pw.currentLine, p[31:]...)
+func NewMultilinePumpWriter(pump *Pump, stdErr bool) *MultilinePumpWriter {
+	pw := &MultilinePumpWriter{
+		PumpWriter: PumpWriter{
+			Pump:   pump,
+			StdErr: stdErr,
+		},
+		ticker:  time.NewTicker(2 * time.Second),
+		Stopped: make(chan struct{}),
 	}
+
+	go func() {
+		for {
+			select {
+			case <-pw.Stopped:
+				return
+			case <-pw.ticker.C:
+				if pw.currentLine != nil && time.Now().After(pw.nextFlushTime) {
+					pw.update(true, nil)
+				}
+			}
+		}
+	}()
+
+	return pw
+}
+
+func (pw *MultilinePumpWriter) Write(p []byte) (n int, err error) {
+	flushCurrent := !pw.Pump.MultilineRegexp.Match(p[31:])
+	pw.update(flushCurrent, p)
 	return len(p), nil
 }
 
 func (pw *MultilinePumpWriter) Close() error {
-	pw.pumpCurrent()
+	pw.ticker.Stop()
+	close(pw.Stopped)
+
+	pw.update(true, nil)
 	return nil
 }
 
-func (pw *MultilinePumpWriter) pumpCurrent() {
-	if pw.currentLine == nil {
-		return
+func (pw *MultilinePumpWriter) update(flushCurrent bool, incoming []byte) {
+	pw.mutex.Lock()
+	defer pw.mutex.Unlock()
+
+	if flushCurrent {
+		if pw.currentLine != nil {
+			pw.Pump.Dumper.Target <- &DockerLogEvent{
+				Line:      pw.currentLine,
+				StdErr:    pw.StdErr,
+				Container: pw.Pump.Container,
+			}
+		}
+		pw.currentLine = CopySlice(incoming)
+	} else {
+		pw.currentLine = append(pw.currentLine, incoming[31:]...)
 	}
-	pw.Pump.Dumper.Target <- &DockerLogEvent{
-		Line:      pw.currentLine,
-		StdErr:    pw.StdErr,
-		Container: pw.Pump.Container,
-	}
+	pw.nextFlushTime = time.Now().Add(3 * time.Second)
 }

@@ -1,6 +1,9 @@
 package dockerlogbeat
 
 func CopySlice(src []byte) []byte {
+	if src == nil {
+		return nil
+	}
 	result := make([]byte, len(src))
 	copy(result, src)
 	return result
