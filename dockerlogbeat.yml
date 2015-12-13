@@ -6,4 +6,5 @@ output:
     # hosts: ["192.168.99.100:7777", "192.168.99.100:5044"]
     # hosts: ["192.168.99.101:7777"]
 
-registry_file: /tmp/.dockerlogbeat
+dockerlogbeat:
+  registry_file: /tmp/.dockerlogbeat

@@ -33,18 +33,18 @@ func New() *DockerLogBeat {
 func (dlb *DockerLogBeat) Config(b *beat.Beat) error {
 	var err error
 
-	config := Config{}
-	if err = cfgfile.Read(&config, ""); err != nil {
+	rootConfig := RootConfig{}
+	if err = cfgfile.Read(&rootConfig, ""); err != nil {
 		logp.Err("Error reading configuration file: %v", err)
 		return err
 	}
 
-	dlb.spooler, err = NewSpooler(dlb.Events, &config)
+	dlb.spooler, err = NewSpooler(dlb.Events, &rootConfig.Config)
 	if err != nil {
 		return err
 	}
 
-	dlb.registry, err = NewRegistry(config.RegistryFile)
+	dlb.registry, err = NewRegistry(rootConfig.Config.RegistryFile)
 	if err != nil {
 		return err
 	}
