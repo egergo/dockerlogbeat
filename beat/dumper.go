@@ -131,6 +131,12 @@ func (dumper *Dumper) ScanContainers() error {
 			}
 		}
 
+		negate := envvars["DLB_MULTILINE_NEGATE"]
+		multilineNegate := false
+		if negate == "true" || negate == "1" {
+			multilineNegate = true
+		}
+
 		containerInfo := ContainerInfo{
 			ContainerID:   container.ID,
 			ContainerName: container.Name[1:],
@@ -140,7 +146,7 @@ func (dumper *Dumper) ScanContainers() error {
 			Host:          os.Getenv("TUTUM_NODE_HOSTNAME"),
 		}
 
-		pump := dumper.NewPump(&containerInfo, multilineRegexp)
+		pump := dumper.NewPump(&containerInfo, multilineRegexp, multilineNegate)
 		dumper.containers[container.ID] = true
 
 		go func() {

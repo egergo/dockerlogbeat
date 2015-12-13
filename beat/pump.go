@@ -14,6 +14,7 @@ type Pump struct {
 	Dumper          *Dumper
 	Container       *ContainerInfo
 	MultilineRegexp *regexp.Regexp
+	MultilineNegate bool
 }
 
 type PumpWriter struct {
@@ -32,11 +33,12 @@ type MultilinePumpWriter struct {
 	Stopped chan struct{}
 }
 
-func (dumper *Dumper) NewPump(container *ContainerInfo, multilineRegexp *regexp.Regexp) *Pump {
+func (dumper *Dumper) NewPump(container *ContainerInfo, multilineRegexp *regexp.Regexp, multilineNegate bool) *Pump {
 	return &Pump{
 		Dumper:          dumper,
 		Container:       container,
 		MultilineRegexp: multilineRegexp,
+		MultilineNegate: multilineNegate,
 	}
 }
 
@@ -118,6 +120,9 @@ func NewMultilinePumpWriter(pump *Pump, stdErr bool) *MultilinePumpWriter {
 
 func (pw *MultilinePumpWriter) Write(p []byte) (n int, err error) {
 	flushCurrent := !pw.Pump.MultilineRegexp.Match(p[31:])
+	if pw.Pump.MultilineNegate {
+		flushCurrent = !flushCurrent
+	}
 	pw.update(flushCurrent, p)
 	return len(p), nil
 }
